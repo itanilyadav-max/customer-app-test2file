@@ -852,45 +852,169 @@ window._authResolved = false;
     }
 
     window.renderMenuItems = (cat) => {
-        const list = document.getElementById('menuList'); 
+        const list = document.getElementById('menuList');
         list.innerHTML = '';
-        document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active')); 
-        const btn = document.getElementById('catBtn-' + cat.replace(/\s+/g,'')); 
+        document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+        const btn = document.getElementById('catBtn-' + cat.replace(/\s+/g,''));
         if(btn) btn.classList.add('active');
-        
-        let hasItems = false;
-        Object.entries(menuData).forEach(([id, item]) => {
-            if(!item.available) return; 
+
+        // Delivery date calculator — skips Sundays and holidays
+        const calcDelivery = function(growDays) {
+            var days = parseInt(growDays) || 7;
+            var d = new Date(); d.setHours(0,0,0,0);
+            var counted = 0; var skipped = [];
+            while (counted < days) {
+                d.setDate(d.getDate() + 1);
+                var ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+                if (d.getDay() === 0) continue;
+                var h = window.getHolidayName ? window.getHolidayName(ds) : null;
+                if (h) { skipped.push(h); continue; }
+                counted++;
+            }
+            return {
+                label: d.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}),
+                days: days, skipped: skipped
+            };
+        };
+
+        var hasActive = false;
+        var oosItems = [];
+
+        // Pass 1 — available items (identical look to original, now passes gramsPerTray)
+        Object.entries(menuData).forEach(function(entry) {
+            var id = entry[0]; var item = entry[1];
             if(cat !== 'All' && item.category !== cat) return;
-            hasItems = true;
-            list.innerHTML += `
-                <div class="bg-white p-5 rounded-[32px] flex gap-5 items-center border border-gray-50 shadow-sm">
-                    <img src="${item.imageUrl || ''}" class="w-24 h-24 rounded-2xl object-cover bg-gray-50" onerror="this.src='https://placehold.co/150x150?text=Oligo'">
-                    <div class="flex-1">
-                        <h4 class="font-bold text-lg">${item.name}</h4>
-                        <p class="text-[11px] text-gray-500 mt-1">${item.description || 'Fresh harvest.'}</p>
-                        <div class="flex justify-between items-center mt-3">
-                            <span class="font-bold text-green-700 text-lg">Box ${item.price}</span>
-                            <button onclick="window.addToBasket('${id}', '${item.name}', '${item.price}', '${item.category || ''}')" class="bg-green-600 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-md active:scale-90 transition">ADD</button>
-                        </div>
-                    </div>
-                </div>`;
+            if(!item.available) { oosItems.push(entry); return; }
+            hasActive = true;
+            var grams = parseInt(item.gramsPerTray) || 0;
+            var gramsTag = grams > 0 ? '<span class="text-[10px] text-gray-400 font-medium">' + grams + 'g per box</span>' : '';
+            var safeName = item.name.replace(/'/g,"&#39;");
+            list.innerHTML += '<div class="bg-white p-5 rounded-[32px] flex gap-5 items-center border border-gray-50 shadow-sm">'
+                + '<img src="' + (item.imageUrl||'') + '" class="w-24 h-24 rounded-2xl object-cover bg-gray-50" onerror="this.src=\'https://placehold.co/150x150?text=Oligo\'">'
+                + '<div class="flex-1">'
+                + '<h4 class="font-bold text-lg">' + item.name + '</h4>'
+                + '<p class="text-[11px] text-gray-500 mt-1">' + (item.description||'Fresh harvest.') + '</p>'
+                + gramsTag
+                + '<div class="flex justify-between items-center mt-3">'
+                + '<span class="font-bold text-green-700 text-lg">Box ' + item.price + '</span>'
+                + '<button onclick="window.addToBasket(\'' + id + '\',\'' + safeName + '\',\'' + item.price + '\',\'' + (item.category||'') + '\',' + grams + ')" class="bg-green-600 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-md active:scale-90 transition">ADD</button>'
+                + '</div></div></div>';
         });
-        if(!hasItems) {
+
+        // Pass 2 — out-of-stock items: faded with harvest countdown + pre-order
+        if (oosItems.length > 0) {
+            if (hasActive) {
+                list.innerHTML += '<div class="my-5 flex items-center gap-3">'
+                    + '<div class="flex-1 h-px bg-gray-100"></div>'
+                    + '<div class="flex items-center gap-1.5 bg-orange-50 border border-orange-100 rounded-full px-3 py-1">'
+                    + '<i class="fas fa-seedling text-orange-400 text-[10px]"></i>'
+                    + '<span class="text-[10px] font-black uppercase tracking-widest text-orange-400">Currently Growing</span>'
+                    + '</div>'
+                    + '<div class="flex-1 h-px bg-gray-100"></div></div>';
+            }
+            oosItems.forEach(function(entry) {
+                var id = entry[0]; var item = entry[1];
+                var growDays = parseInt(item.growTime) || 7;
+                var grams    = parseInt(item.gramsPerTray) || 0;
+                var res      = calcDelivery(growDays);
+                var deliveryLabel = res.label;
+                var skipped  = res.skipped;
+                var safeName  = item.name.replace(/'/g,'&#39;');
+                var safeLabel = deliveryLabel.replace(/'/g,'&#39;');
+                var todayLabel = new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
+
+                var holidayMsg = '';
+                if (skipped.length > 0) {
+                    holidayMsg = '<div class="mt-2 flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">'
+                        + '<i class="fas fa-calendar-times text-amber-500 text-[11px] mt-0.5 flex-shrink-0"></i>'
+                        + '<p class="text-[10px] text-amber-700 font-semibold leading-4">+' + skipped.length + ' day(s) added due to holiday: <strong>' + skipped.join(', ') + '</strong></p>'
+                        + '</div>';
+                }
+
+                var gramsInfo = grams > 0 ? '<p class="text-[10px] text-gray-400 mt-0.5">' + grams + 'g per box</p>' : '';
+
+                list.innerHTML += '<div class="rounded-[28px] border border-gray-200 bg-white overflow-hidden" style="opacity:0.85;">'
+                    // Top status strip
+                    + '<div class="bg-gradient-to-r from-red-50 to-orange-50 border-b border-orange-100 px-5 py-2 flex items-center justify-between">'
+                    + '<div class="flex items-center gap-2">'
+                    + '<span class="w-2 h-2 rounded-full bg-red-400 animate-pulse inline-block"></span>'
+                    + '<span class="text-[11px] font-black text-red-500 uppercase tracking-wider">Out of Stock</span>'
+                    + '</div>'
+                    + '<span class="text-[10px] text-orange-600 font-semibold bg-white border border-orange-100 px-2 py-0.5 rounded-full">'
+                    + '<i class="fas fa-seedling mr-1"></i>Ready in ' + growDays + ' days</span>'
+                    + '</div>'
+                    // Faded item row
+                    + '<div class="p-5 flex gap-4 items-start" style="filter:saturate(0.15);">'
+                    + '<img src="' + (item.imageUrl||'') + '" class="w-20 h-20 rounded-2xl object-cover bg-gray-100 flex-shrink-0" onerror="this.src=\'https://placehold.co/150x150?text=Oligo\'">'
+                    + '<div>'
+                    + '<h4 class="font-bold text-lg text-gray-600">' + item.name + '</h4>'
+                    + '<p class="text-[11px] text-gray-400 mt-0.5">' + (item.description||'Fresh harvest.') + '</p>'
+                    + gramsInfo
+                    + '<p class="text-gray-400 text-base font-bold mt-1">Box ' + item.price + '</p>'
+                    + '</div></div>'
+                    // Delivery info panel — full colour
+                    + '<div class="mx-4 mb-4 rounded-2xl border border-green-100 bg-green-50 p-4">'
+                    + '<p class="text-[11px] font-black text-green-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">'
+                    + '<i class="fas fa-truck-fast text-green-500"></i> When will I get it?</p>'
+                    // Timeline
+                    + '<div class="flex items-center gap-2 mb-3">'
+                    + '<div class="flex flex-col items-center">'
+                    + '<div class="w-7 h-7 rounded-full bg-green-200 flex items-center justify-center"><i class="fas fa-calendar-plus text-green-700 text-[10px]"></i></div>'
+                    + '<div class="w-px h-6 bg-green-200"></div>'
+                    + '<div class="w-7 h-7 rounded-full bg-blue-200 flex items-center justify-center"><i class="fas fa-box text-blue-700 text-[10px]"></i></div>'
+                    + '</div>'
+                    + '<div class="flex-1 space-y-2">'
+                    + '<div class="bg-white rounded-xl px-3 py-1.5 border border-green-100">'
+                    + '<p class="text-[10px] text-gray-400 font-semibold">Order Today</p>'
+                    + '<p class="text-[11px] font-bold text-gray-700">' + todayLabel + '</p>'
+                    + '</div>'
+                    + '<div class="bg-white rounded-xl px-3 py-1.5 border border-blue-100">'
+                    + '<p class="text-[10px] text-gray-400 font-semibold">Estimated Delivery</p>'
+                    + '<p class="text-[11px] font-bold text-blue-700">' + deliveryLabel + '</p>'
+                    + '</div></div></div>'
+                    + holidayMsg
+                    + '<p class="text-[10px] text-gray-500 leading-4 mt-2">'
+                    + '<i class="fas fa-info-circle mr-1 text-gray-400"></i>'
+                    + 'Pre-order now — we harvest fresh &amp; deliver on the date above.</p>'
+                    + '<button onclick="window.preOrderItem(\'' + id + '\',\'' + safeName + '\',\'' + item.price + '\',\'' + (item.category||'') + '\',' + growDays + ',\'' + safeLabel + '\',' + grams + ')"'
+                    + ' class="mt-3 w-full bg-blue-600 text-white py-2.5 rounded-xl text-xs font-bold shadow-sm active:scale-[0.98] transition flex items-center justify-center gap-2">'
+                    + '<i class="fas fa-clock"></i> Pre-Order for ' + deliveryLabel + '</button>'
+                    + '</div></div>';
+            });
+        }
+
+        if (!hasActive && oosItems.length === 0) {
             list.innerHTML = '<p class="text-center text-gray-400 py-8">No items in this category</p>';
         }
     };
 
-    window.addToBasket = (id, name, price, category, qty = 1) => {
-        const numPrice = parseFloat(price) || 0; 
-        const existing = basket.find(i => i.id === id); 
-        if(existing) { 
-            existing.qty = (existing.qty || 0) + qty; 
-        } else { 
-            basket.push({ id, name, price: numPrice, category: category || 'Microgreens', qty }); 
+    window.preOrderItem = function(id, name, price, category, growDays, deliveryLabel, grams) {
+        var numPrice = parseFloat(price) || 0;
+        var existing = basket.find(function(i){ return i.id === id; });
+        if (existing) {
+            existing.qty = (existing.qty || 0) + 1;
+        } else {
+            basket.push({ id:id, name:name, price:numPrice,
+                category: category || 'Microgreens', qty:1,
+                isPreOrder:true, estimatedDelivery:deliveryLabel,
+                growDays:parseInt(growDays)||7, gramsPerBox:parseInt(grams)||0 });
         }
-        saveBasket(); 
-        window.showToast("Added to basket");
+        saveBasket();
+        window.showToast('Pre-order added! Delivery: ' + deliveryLabel);
+    };
+
+    window.addToBasket = function(id, name, price, category, gramsPerBox, qty) {
+        qty = qty || 1; gramsPerBox = parseInt(gramsPerBox) || 0;
+        var numPrice = parseFloat(price) || 0;
+        var existing = basket.find(function(i){ return i.id === id; });
+        if(existing) {
+            existing.qty = (existing.qty || 0) + qty;
+            if (!existing.gramsPerBox && gramsPerBox) existing.gramsPerBox = gramsPerBox;
+        } else {
+            basket.push({ id:id, name:name, price:numPrice, category: category || 'Microgreens', qty:qty, gramsPerBox:gramsPerBox });
+        }
+        saveBasket();
+        window.showToast('Added to basket');
     };
 
     function updateBadge() { 
@@ -903,32 +1027,84 @@ window._authResolved = false;
     }
 
     function renderBasket() {
-        const list = document.getElementById('cartItems'); 
-        const totalEl = document.getElementById('cartTotal'); 
+        const list = document.getElementById('cartItems');
+        const totalEl = document.getElementById('cartTotal');
         let total = 0;
-        
-        if(basket.length === 0) { 
-            list.innerHTML = '<p class="text-center text-gray-400 py-10">Your basket is empty</p>'; 
-            totalEl.innerText = "Box 0"; 
-            return; 
+
+        if(basket.length === 0) {
+            list.innerHTML = '<p class="text-center text-gray-400 py-10 font-medium">Your basket is empty</p>';
+            totalEl.innerText = "Box 0";
+            return;
         }
-        
-        list.innerHTML = basket.map((item, idx) => {
-            total += (item.price * item.qty); 
-            return `
-                <div class="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
-                    <div>
-                        <p class="font-bold">${item.name}</p>
-                        <p class="text-xs text-gray-500">Qty: ${item.qty}</p>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <button onclick="window.changeQty(${idx}, -1)" class="w-8 h-8 rounded-full bg-white border flex items-center justify-center">-</button>
-                        <span class="font-bold">${item.qty}</span>
-                        <button onclick="window.changeQty(${idx}, 1)" class="w-8 h-8 rounded-full bg-white border flex items-center justify-center">+</button>
-                    </div>
-                </div>`;
+
+        // Hardcoded quantity-display rules (same as old customer app)
+        function getQuantityDisplay(item) {
+            var qty      = item.qty || 1;
+            var name     = (item.name || '').toLowerCase();
+            var category = item.category || '';
+            if (category === 'Live Trays') {
+                return qty + ' Tray' + (qty > 1 ? 's' : '');
+            }
+            if (category === 'Edible Flowers' || (name.indexOf('flower') !== -1 && name.indexOf('sunflower') === -1)) {
+                return qty + ' Box' + (qty > 1 ? '(es)' : '');
+            }
+            if (name.indexOf('nasturtium') !== -1) {
+                return (qty * 25) + ' Leaves';
+            }
+            if (name.indexOf('basil') !== -1) {
+                return qty + ' Box' + (qty > 1 ? '(es)' : '');
+            }
+            if (name.indexOf('wheatgrass') !== -1 || category === 'Wheatgrass') {
+                return (qty * 100) + 'g';
+            }
+            if (name.indexOf('beetroot') !== -1 || name.indexOf('red amaranth') !== -1) {
+                return (qty * 15) + 'g';
+            }
+            if (name.indexOf('superfood') !== -1 || name.indexOf('rainbow') !== -1) {
+                return (qty * 60) + 'g';
+            }
+            // default
+            return (qty * 50) + 'g';
+        }
+
+        var totalGrams = 0;
+        list.innerHTML = basket.map(function(item, idx) {
+            total += (item.price * item.qty);
+            var qDisplay = getQuantityDisplay(item);
+
+            // Accumulate total grams (only for gram-based lines)
+            if (qDisplay.indexOf('g') !== -1 && qDisplay.indexOf('Trays') === -1 && qDisplay.indexOf('Box') === -1 && qDisplay.indexOf('Leaves') === -1) {
+                totalGrams += parseInt(qDisplay) || 0;
+            }
+
+            var preTag = (item.isPreOrder && item.estimatedDelivery)
+                ? '<span class="inline-flex items-center gap-1 mt-1 bg-blue-50 border border-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">'
+                  + '<i class="fas fa-clock" style="font-size:9px"></i>&nbsp;Pre-order &middot; ' + item.estimatedDelivery + '</span>'
+                : '';
+
+            return '<div class="flex justify-between items-center bg-gray-50 p-5 rounded-2xl border border-gray-100">'
+                + '<div>'
+                + '<p class="font-bold text-sm text-gray-800">' + item.name + '</p>'
+                + '<p class="text-[10px] text-green-600 font-bold mt-0.5"><i class="fas fa-weight-hanging mr-1"></i>' + qDisplay + '</p>'
+                + preTag
+                + '</div>'
+                + '<div class="flex items-center gap-3">'
+                + '<button onclick="window.changeQty(' + idx + ', -1)" class="w-8 h-8 rounded-full bg-white border flex items-center justify-center text-gray-400">-</button>'
+                + '<span class="font-bold text-sm text-gray-800">' + item.qty + '</span>'
+                + '<button onclick="window.changeQty(' + idx + ', 1)" class="w-8 h-8 rounded-full bg-white border flex items-center justify-center text-gray-400">+</button>'
+                + '</div>'
+                + '</div>';
         }).join('');
-        totalEl.innerText = "Box " + total;
+
+        if (totalGrams > 0) {
+            list.innerHTML += '<div class="mt-2 flex items-center justify-between bg-green-50 border border-green-100 rounded-2xl px-4 py-2.5">'
+                + '<span class="text-xs font-bold text-green-700"><i class="fas fa-weight-hanging mr-1.5"></i>Total Weight</span>'
+                + '<span class="text-sm font-black text-green-700">' + totalGrams + 'g</span>'
+                + '</div>';
+        }
+
+        const dateIn = document.getElementById('checkoutDate') ? document.getElementById('checkoutDate').value : '';
+        if(dateIn && window.calculateDeliveryLogic) { window.calculateDeliveryLogic(dateIn); } else { totalEl.innerText = 'Box ' + total; }
     }
 
     window.changeQty = (idx, d) => { 
