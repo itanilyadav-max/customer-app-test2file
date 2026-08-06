@@ -189,6 +189,19 @@
         .mobile-header, .mobile-nav { display: none !important; }
     }
 
+    /* Cart Sheet Flexbox Layout for Mobile Optimization */
+    .cart-sheet {
+        width: 100%;
+        max-width: 600px;
+        max-height: 92dvh;
+        max-height: 92vh;
+        background: white;
+        border-radius: 36px 36px 0 0;
+        display: flex;
+        flex-direction: column;
+        padding: 20px 20px max(env(safe-area-inset-bottom), 16px) 20px;
+    }
+
     .sub-modal {
         position: fixed;
         inset: 0;
@@ -1030,18 +1043,30 @@
     </div>
 </div>
 
-<!-- CART MODAL -->
+<!-- CART MODAL (MOBILE OPTIMIZED BOTTOM SHEET) -->
 <div id="cartModal" class="modal-backdrop">
     <div class="cart-sheet">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-2xl font-bold tracking-tight">Your Basket</h2>
-            <button onclick="window.closeCart()" class="text-gray-400 w-10 h-10 rounded-full hover:bg-gray-100 flex items-center justify-center transition"><i class="fas fa-times text-xl"></i></button>
+        
+        <!-- STICKY HEADER -->
+        <div class="flex justify-between items-center pb-4 border-b border-gray-100 flex-shrink-0">
+            <div>
+                <h2 class="text-xl font-bold tracking-tight text-gray-900">Checkout Basket</h2>
+                <button type="button" onclick="window.closeCart(); window.navTo('viewHome');" class="text-xs text-emerald-600 font-bold flex items-center gap-1 mt-0.5 hover:underline">
+                    <i class="fas fa-plus-circle"></i> Add More Microgreens
+                </button>
+            </div>
+            <button type="button" onclick="window.closeCart()" class="text-gray-400 w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition">
+                <i class="fas fa-times text-lg"></i>
+            </button>
         </div>
         
-        <div id="cartItems" class="space-y-6 mb-8 max-h-[30vh] overflow-y-auto pr-2 custom-scroll"></div>
-        
-        <div class="border-t border-gray-100 pt-6 space-y-5">
+        <!-- SCROLLABLE CONTENT BODY -->
+        <div class="flex-1 overflow-y-auto py-4 space-y-4 pr-1 custom-scroll">
             
+            <!-- BASKET ITEMS -->
+            <div id="cartItems" class="space-y-3"></div>
+            
+            <!-- SUBSCRIBE TOGGLE CARD -->
             <div class="bg-blue-50 border border-blue-100 p-4 rounded-2xl flex items-center justify-between">
                 <div>
                     <span class="text-sm font-bold text-blue-800">Subscribe & Save</span>
@@ -1053,22 +1078,23 @@
                 </label>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <!-- ADDRESS & SCHEDULE CONFIGURATION (FULL WIDTH CARDS ON MOBILE) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="bg-gray-50 p-4 rounded-2xl">
-                    <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Deliver To</span>
-                    <select id="checkoutAddrSelect" class="w-full bg-transparent border-none font-bold text-sm outline-none focus:ring-0 cursor-pointer">
-                        <option value="">-- Choose --</option>
+                    <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Deliver To *</span>
+                    <select id="checkoutAddrSelect" class="w-full bg-transparent border-none font-bold text-xs outline-none focus:ring-0 cursor-pointer text-gray-800">
+                        <option value="">-- Choose saved address --</option>
                     </select>
                 </div>
                 
                 <div class="bg-gray-50 p-4 rounded-2xl" id="deliveryConfigContainer">
                     <div id="oneTimeConfig">
-                        <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Delivery Date</span>
-                        <input type="date" id="checkoutDate" class="w-full bg-transparent border-none font-bold text-sm outline-none focus:ring-0 cursor-pointer text-gray-800">
+                        <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Delivery Date *</span>
+                        <input type="date" id="checkoutDate" class="w-full bg-transparent border-none font-bold text-xs outline-none focus:ring-0 cursor-pointer text-gray-800">
                     </div>
                     
                     <div id="subConfig" class="hidden">
-                        <span class="text-[10px] font-bold text-gray-400 uppercase block mb-2">Delivery Days</span>
+                        <span class="text-[10px] font-bold text-gray-400 uppercase block mb-2">Delivery Days *</span>
                         <div class="flex flex-wrap gap-2" id="daySelector">
                             <button onclick="window.toggleDay(this, 'Mon')" class="day-btn">M</button>
                             <button onclick="window.toggleDay(this, 'Tue')" class="day-btn">T</button>
@@ -1079,7 +1105,7 @@
                         </div>
                         <div class="mt-3 pt-3 border-t border-gray-200">
                             <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Duration</span>
-                            <select id="subDuration" onchange="window.updateCheckoutSummaryCard()" class="w-full bg-transparent border-none font-bold text-xs outline-none focus:ring-0">
+                            <select id="subDuration" onchange="window.updateCheckoutSummaryCard()" class="w-full bg-transparent border-none font-bold text-xs outline-none focus:ring-0 text-gray-800">
                                 <option value="1 Week (Trial)">1 Week Trial Pack</option>
                                 <option value="4 Weeks" selected>1 Month (4 Weeks)</option>
                                 <option value="12 Weeks">3 Months (12 Weeks)</option>
@@ -1090,7 +1116,7 @@
                 </div>
             </div>
 
-            <!-- DROP-OFF INSTRUCTION FEATURE -->
+            <!-- DROP-OFF PREFERENCE -->
             <div class="bg-gray-50 p-4 rounded-2xl">
                 <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Drop-off Preference</span>
                 <select id="dropOffPref" class="w-full bg-transparent border-none font-bold text-xs outline-none focus:ring-0 cursor-pointer text-gray-800">
@@ -1101,6 +1127,7 @@
                 </select>
             </div>
 
+            <!-- PAYMENT METHOD -->
             <div class="bg-gray-50 p-4 rounded-2xl">
                 <span class="text-[10px] font-bold text-gray-400 uppercase block mb-2">Payment Method</span>
                 <div class="grid grid-cols-2 gap-2" id="paymentMethodSelector">
@@ -1124,6 +1151,7 @@
                 </div>
             </div>
 
+            <!-- VOUCHER CODE -->
             <div class="bg-gray-50 p-4 rounded-2xl">
                 <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Have a Voucher?</span>
                 <div class="flex gap-2">
@@ -1133,40 +1161,42 @@
                 <p id="voucherMsg" class="text-[10px] font-bold mt-2 hidden"></p>
             </div>
 
+            <!-- PRODUCTION NOTE -->
             <div class="bg-gray-50 p-4 rounded-2xl">
                 <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Message for Production (Optional)</span>
                 <textarea id="orderNote" placeholder="e.g. Deliver by 10am..." class="w-full bg-transparent border-none text-sm outline-none focus:ring-0 text-gray-800 resize-none" rows="2"></textarea>
             </div>
+        </div>
 
-            <div class="space-y-2">
-                <div id="voucherDiscountSection" class="flex justify-between items-center px-2 hidden">
-                    <span class="text-green-600 font-medium text-xs"><i class="fas fa-tag mr-1"></i>Voucher Discount</span>
-                    <span id="voucherDiscountDisplay" class="text-sm font-bold text-green-600">-₹0</span>
-                </div>
-                <div id="deliveryFeeSection" class="flex justify-between items-center px-2 hidden">
-                    <span class="text-gray-400 font-medium text-xs">Delivery Fee</span>
-                    <span id="deliveryFeeDisplay" class="text-sm font-bold text-gray-800">₹0</span>
-                </div>
-                <p id="deliveryMessage" class="px-2 text-[10px] font-bold italic"></p>
-
-                <!-- DYNAMIC ORDER & SUBSCRIPTION SUMMARY BOX -->
-                <div id="checkoutSummaryCard" class="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl my-3">
-                    <div class="flex justify-between items-center mb-2">
-                        <span id="summaryTypeBadge" class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600 text-white">One-Time Order</span>
-                        <span id="summaryScheduleText" class="text-xs font-bold text-emerald-900">Delivery: -</span>
-                    </div>
-                    <div class="text-[10px] text-gray-500 font-bold uppercase mb-1">Selected Microgreens:</div>
-                    <div id="summaryItemsList" class="flex flex-wrap gap-1"></div>
-                </div>
-
-                <div class="flex justify-between items-center px-2 pt-2">
-                    <span class="text-gray-400 font-medium" id="totalLabel">Grand Total</span>
-                    <span id="cartTotal" class="text-2xl font-bold text-green-700 tracking-tighter">Box 0</span>
-                </div>
-                <p id="subTotalNote" class="text-right px-2 text-[10px] text-blue-600 font-bold hidden">Per Delivery Estimate</p>
+        <!-- STICKY FOOTER ACTION BAR -->
+        <div class="pt-3 border-t border-gray-100 flex-shrink-0 space-y-2 bg-white">
+            <div id="voucherDiscountSection" class="flex justify-between items-center px-1 hidden">
+                <span class="text-green-600 font-medium text-xs"><i class="fas fa-tag mr-1"></i>Voucher Discount</span>
+                <span id="voucherDiscountDisplay" class="text-sm font-bold text-green-600">-₹0</span>
             </div>
-            
-            <button id="orderBtn" type="button" onclick="window.placeOrder()" class="w-full bg-green-600 text-white py-5 rounded-[24px] font-bold shadow-xl shadow-green-100 disabled:opacity-50 transition active:scale-[0.98]">Confirm Order (COD)</button>
+            <div id="deliveryFeeSection" class="flex justify-between items-center px-1 hidden">
+                <span class="text-gray-400 font-medium text-xs">Delivery Fee</span>
+                <span id="deliveryFeeDisplay" class="text-sm font-bold text-gray-800">₹0</span>
+            </div>
+            <p id="deliveryMessage" class="px-1 text-[10px] font-bold italic"></p>
+
+            <!-- DYNAMIC ORDER & SUBSCRIPTION SUMMARY CARD -->
+            <div id="checkoutSummaryCard" class="bg-emerald-50 border border-emerald-100 p-3 rounded-2xl">
+                <div class="flex justify-between items-center mb-1">
+                    <span id="summaryTypeBadge" class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600 text-white">One-Time Order</span>
+                    <span id="summaryScheduleText" class="text-xs font-bold text-emerald-900">Delivery: -</span>
+                </div>
+                <div class="text-[9px] text-gray-400 font-bold uppercase mb-1">Selected Microgreens:</div>
+                <div id="summaryItemsList" class="flex flex-wrap gap-1"></div>
+            </div>
+
+            <div class="flex justify-between items-center px-1 pt-1">
+                <span class="text-gray-400 text-xs font-semibold" id="totalLabel">Grand Total</span>
+                <span id="cartTotal" class="text-2xl font-bold text-green-700 tracking-tighter">Box 0</span>
+            </div>
+            <p id="subTotalNote" class="text-right px-1 text-[10px] text-blue-600 font-bold hidden">Per Delivery Estimate</p>
+
+            <button id="orderBtn" type="button" onclick="window.placeOrder()" class="w-full bg-green-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-green-100 disabled:opacity-50 transition active:scale-[0.98]">Confirm Order (COD)</button>
         </div>
     </div>
 </div>
