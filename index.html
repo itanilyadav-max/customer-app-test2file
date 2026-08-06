@@ -189,7 +189,6 @@
         .mobile-header, .mobile-nav { display: none !important; }
     }
 
-    /* Cart Sheet Flexbox Layout for Mobile Optimization */
     .cart-sheet {
         width: 100%;
         max-width: 600px;
@@ -825,7 +824,7 @@
                             </div>
                             <div>
                                 <h4 class="font-bold text-sm text-gray-800">Freshness & Storage Tips</h4>
-                                <p class="text-[10px] text-gray-500">Keep your microgreens crisp for 10+ days</p>
+                                <p class="text-[10px] text-gray-500">Keep your microgreens crisp for 3+ days</p>
                             </div>
                         </div>
                         <ul class="text-xs space-y-2 text-gray-600 pl-2">
@@ -1270,8 +1269,13 @@
 
         <div class="bg-orange-50 border border-orange-100 p-5 rounded-[24px]">
             <h4 class="font-bold text-orange-800 text-sm mb-1 flex items-center gap-2"><i class="fas fa-plane"></i> Vacation Mode / Reschedule</h4>
-            <p class="text-[10px] text-orange-600 mb-4 leading-tight">Select a delivery date below to skip or move.</p>
+            <p class="text-[10px] text-orange-600 mb-3 leading-tight">Select a delivery date below to skip or move.</p>
             
+            <!-- 48-HOUR AUTOMATED APPROVAL POLICY NOTICE -->
+            <div class="bg-amber-100/80 border border-amber-200 rounded-xl p-3 mb-4 text-[10px] text-amber-900 leading-relaxed">
+                <i class="fas fa-clock mr-1 text-amber-700"></i><strong>48-Hour Rule:</strong> Requests submitted at least 48 hours prior to delivery are <strong>Auto-Approved</strong>. Pauses within 48h require emergency review as crops are in final harvest.
+            </div>
+
             <div class="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">
                 <div class="flex justify-between items-center mb-3">
                     <button onclick="window.changeCalMonth(-1)" class="w-6 h-6 flex items-center justify-center bg-gray-100 rounded-full text-gray-500 hover:bg-gray-200"><i class="fas fa-chevron-left text-[10px]"></i></button>
@@ -2835,18 +2839,18 @@
         if (subMods.length > 0) {
             container.innerHTML = '<p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Pending / Active Changes</p>';
             subMods.forEach(m => {
-                let statusColor = m.status === 'APPROVED' ? 'text-green-600' : 'text-orange-600';
+                let statusColor = m.status === 'APPROVED' ? 'text-green-600 bg-green-50' : 'text-orange-600 bg-orange-50';
                 let moveText = m.moveDate && m.moveDate.includes('Skip') ? 'Skipped' : `Moved to ${new Date(m.moveDate).toLocaleDateString()}`;
                 const skipDisplay = !isNaN(new Date(m.skipDate).getTime()) ? new Date(m.skipDate).toLocaleDateString() : m.skipDate;
 
                 container.innerHTML += `
-                    <div class="bg-white border border-gray-100 p-2 rounded-lg text-xs flex justify-between items-center mb-1">
+                    <div class="bg-white border border-gray-100 p-2.5 rounded-xl text-xs flex justify-between items-center mb-1.5 shadow-sm">
                         <div>
                             <span class="text-red-500 font-bold line-through mr-1">${skipDisplay}</span>
                             <i class="fas fa-arrow-right text-gray-300 mx-1"></i>
                             <span class="font-bold text-gray-700">${moveText}</span>
                         </div>
-                        <span class="${statusColor} font-bold text-[9px] uppercase">${(m.status || 'PENDING').replace('_', ' ')}</span>
+                        <span class="${statusColor} px-2 py-0.5 rounded-full font-bold text-[9px] uppercase tracking-wider">${(m.status || 'PENDING').replace('_', ' ')}</span>
                     </div>
                 `;
             });
@@ -2885,27 +2889,53 @@
     window.validateVacationDate = (input) => {
         const dateStr = input.value;
         if (!dateStr) return;
-        const d = new Date(dateStr);
+        const d = new Date(dateStr + "T00:00:00");
         if (d.getDay() === 0) { window.showToast("Sundays are closed.", true); input.value = ""; return; }
         const holiday = Object.values(holidaysData).find(h => h.date === dateStr);
         if (holiday) { window.showToast(`Farm closed: ${holiday.name}`, true); input.value = ""; return; }
+
+        const now = new Date();
+        const diffHours = (d - now) / (1000 * 60 * 60);
+        if (diffHours < 48) {
+            window.showToast("Notice: Pause requested <48h requires emergency admin review as greens are in harvest.", true);
+        }
     };
 
+    // 48-HOUR AUTOMATED APPROVAL / LOCK-IN RESCHEDULE LOGIC
     window.submitReschedule = () => {
         const skip = document.getElementById('vacationDate').value;
         const move = document.getElementById('newDeliveryDate').value;
         if (!skip) return window.showToast("Select a date to skip", true);
+
+        const now = new Date();
+        const skipDateObj = new Date(skip + "T00:00:00");
+        const diffHours = (skipDateObj - now) / (1000 * 60 * 60);
+
+        if (diffHours < 0) {
+            return window.showToast("Cannot select a past date.", true);
+        }
+
+        const isAutoApproved = diffHours >= 48;
+        const status = isAutoApproved ? "APPROVED" : "PENDING_REVIEW";
+
         const payload = {
             subscriptionId: currentManagingSubId,
             customerUid: auth.currentUser.uid,
-            customerName: userLocalData.name,
+            customerName: userLocalData ? userLocalData.name : 'User',
             skipDate: skip,
             moveDate: move || "Skipped (No Reschedule)",
-            status: "PENDING_REVIEW",
+            status: status,
+            autoApproved: isAutoApproved,
+            notice: isAutoApproved ? "Auto-approved (>48h advance)" : "Submitted for emergency review (<48h harvest window)",
             createdAt: serverTimestamp()
         };
+
         push(ref(db, 'subscription_modifications'), payload).then(() => {
-            window.showToast("Request Sent to Admin");
+            if (isAutoApproved) {
+                window.showToast("Vacation pause auto-approved! Delivery updated.");
+            } else {
+                window.showToast("Submitted for emergency admin review (<48h harvest window).");
+            }
             window.closeSubManage();
         }).catch(e => window.showToast("Error sending request", true));
     };
@@ -3148,7 +3178,7 @@
                 const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=5`);
                 const data = await res.json();
                 const list = document.getElementById('addrSearchList');
-                list.innerHTML = data.features.map(f => `<div class="search-item" onclick="window.applyAddressResult('${(f.properties.name || f.properties.street || 'Location').replace(/'/g, "\\'")}', '${[f.properties.city, f.properties.state].filter(Boolean).join(', ').replace(/'/g, "\\'")}')"><i class="fas fa-map-marker-alt"></i><div><span class="name">${f.properties.name || f.properties.street}</span><span class="addr">${f.properties.city || ''}</span></div></div>`).join('');
+                list.innerHTML = data.features.map(f => `<div class="search-item" onclick="window.applyAddressResult('${(f.properties.name || f.properties.street || 'Location').replace(/'/g, "\\'")}', '${[f.properties.city, f.properties.state].filter(Boolean).join(', ').replace(/'/g, "\\"')}')"><i class="fas fa-map-marker-alt"></i><div><span class="name">${f.properties.name || f.properties.street}</span><span class="addr">${f.properties.city || ''}</span></div></div>`).join('');
                 list.classList.remove('hidden');
             } catch (e) {}
         }, 400);
