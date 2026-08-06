@@ -189,6 +189,7 @@
         .mobile-header, .mobile-nav { display: none !important; }
     }
 
+    /* Cart Sheet Flexbox Layout for Mobile Optimization */
     .cart-sheet {
         width: 100%;
         max-width: 600px;
@@ -607,6 +608,23 @@
         z-index: 999999 !important;
     }
 </style>
+
+<!-- EMERGENCY INLINE FAILSAFE SCRIPT FOR LOCAL FILE (FILE://) EXECUTION -->
+<script>
+    function forceDismissLoader() {
+        var loader = document.getElementById('appLoader');
+        if (loader && loader.style.display !== 'none') {
+            loader.style.display = 'none';
+            var authSection = document.getElementById('authSection');
+            if (authSection && !document.getElementById('mainApp').classList.contains('flex')) {
+                authSection.classList.remove('hidden');
+                authSection.classList.add('flex');
+            }
+        }
+    }
+    window.addEventListener('load', function() { setTimeout(forceDismissLoader, 1500); });
+    window.addEventListener('error', function() { setTimeout(forceDismissLoader, 500); });
+</script>
 </head>
 <body>
 
@@ -824,7 +842,7 @@
                             </div>
                             <div>
                                 <h4 class="font-bold text-sm text-gray-800">Freshness & Storage Tips</h4>
-                                <p class="text-[10px] text-gray-500">Keep your microgreens crisp for 3+ days</p>
+                                <p class="text-[10px] text-gray-500">Keep your microgreens crisp for 10+ days</p>
                             </div>
                         </div>
                         <ul class="text-xs space-y-2 text-gray-600 pl-2">
@@ -1343,10 +1361,16 @@
     import { getStorage, ref as sRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
     const firebaseConfig = { apiKey: "AIzaSyCtR2jdbu-SZ-7obmg88fPksJnNxk9BnqQ", authDomain: "oligo-store.firebaseapp.com", projectId: "oligo-store", storageBucket: "oligo-store.firebasestorage.app", messagingSenderId: "891788554016", appId: "1:891788554016:web:206c7da0a562fb7b1bf145" };
-    const app = initializeApp(firebaseConfig); 
-    const auth = getAuth(app); 
-    const db = getDatabase(app);
-    const storage = getStorage(app);
+    
+    let app, auth, db, storage;
+    try {
+        app = initializeApp(firebaseConfig); 
+        auth = getAuth(app); 
+        db = getDatabase(app);
+        storage = getStorage(app);
+    } catch(e) {
+        console.warn("Firebase initialization skipped or failed on file://", e);
+    }
 
     const RAZORPAY_KEY_ID = "rzp_live_B3ySltBTbQf0B4";
     const RAZORPAY_BUSINESS_NAME = "Oligo Microgreens";
@@ -1379,12 +1403,12 @@
 
     // Helper functions
     function getFriendlyErrorMessage(error) {
-        const code = error.code;
+        const code = error ? error.code : '';
         if (code === 'auth/invalid-credential' || code === 'auth/user-not-found' || code === 'auth/wrong-password') return "Incorrect email or password.";
         if (code === 'auth/email-already-in-use') return "This email is already registered.";
         if (code === 'auth/weak-password') return "Password must be at least 6 characters.";
         if (code === 'auth/invalid-email') return "Invalid email address format.";
-        return error.message || "An error occurred. Try again.";
+        return (error && error.message) ? error.message : "An error occurred. Try again.";
     }
 
     function getNextSubscriptionDate(selectedDays) {
@@ -1511,6 +1535,7 @@
     window.sendResetLink = () => {
         const email = document.getElementById('recInputEmail').value.trim();
         if(!email) return window.showToast("Please enter your email", true);
+        if (!auth) return window.showToast("Firebase Auth unavailable", true);
         sendPasswordResetEmail(auth, email).then(() => {
             window.showToast("Reset link sent!");
             window.toggleRecovery(false);
@@ -1520,19 +1545,25 @@
     window.sendReferral = () => {
         const email = document.getElementById('referralEmail').value.trim();
         if (!email || !email.includes('@')) return window.showToast("Please enter a valid email", true);
-        push(ref(db, 'referrals'), {
-            friendEmail: email,
-            referredBy: auth.currentUser.uid,
-            referredByName: userLocalData.name || "A User",
-            timestamp: serverTimestamp()
-        });
+        if (db && auth?.currentUser) {
+            push(ref(db, 'referrals'), {
+                friendEmail: email,
+                referredBy: auth.currentUser.uid,
+                referredByName: userLocalData ? userLocalData.name : "A User",
+                timestamp: serverTimestamp()
+            });
+        }
         window.location.href = `mailto:${email}?subject=Invite to Oligo&body=Create your account here: ${window.location.href}`;
         document.getElementById('referralEmail').value = "";
         window.showToast("Invite drafted!");
     };
 
     window.logout = () => {
-        signOut(auth).then(() => { window.location.reload(); }).catch(() => { window.location.reload(); });
+        if (auth) {
+            signOut(auth).then(() => { window.location.reload(); }).catch(() => { window.location.reload(); });
+        } else {
+            window.location.reload();
+        }
     };
 
     // ================================================================
@@ -1622,7 +1653,7 @@
                 prefill: {
                     name: userLocalData?.name || "",
                     contact: userLocalData?.phone || "",
-                    email: auth.currentUser?.email || ""
+                    email: auth?.currentUser?.email || ""
                 },
                 theme: { 
                     color: "#10b981",
@@ -1850,6 +1881,7 @@
         const code = codeInput.value.trim().toUpperCase();
         const msgEl = document.getElementById('voucherMsg');
         if (!code) return;
+        if (!db) return window.showToast("Database uninitialized", true);
 
         onValue(ref(db, 'vouchers/' + code), (snap) => {
             const v = snap.val();
@@ -2008,7 +2040,7 @@
             function saveSubscription(razorpayResponse) {
                 if (isOnlinePayment) showPaymentProcessing();
                 const subData = {
-                    customerUid: auth.currentUser.uid,
+                    customerUid: auth?.currentUser?.uid || 'guest',
                     customerName: userLocalData.name || "Guest",
                     customerPhone: userLocalData.phone,
                     restaurantId: activeProducerId,
@@ -2028,7 +2060,7 @@
                 const subKey = subRef.key;
 
                 const firstOrderData = {
-                    customerUid: auth.currentUser.uid,
+                    customerUid: auth?.currentUser?.uid || 'guest',
                     customerName: userLocalData.name || "Guest",
                     customerPhone: userLocalData.phone,
                     restaurantId: activeProducerId,
@@ -2077,7 +2109,7 @@
                 if (isOnlinePayment) showPaymentProcessing();
                 const grandTotal = itemsTotal + currentDeliveryFee;
                 const orderData = {
-                    customerUid: auth.currentUser.uid,
+                    customerUid: auth?.currentUser?.uid || 'guest',
                     customerName: userLocalData.name || "Guest",
                     customerPhone: userLocalData.phone,
                     restaurantId: activeProducerId,
@@ -2210,8 +2242,12 @@
         const phone = document.getElementById('profPhone').value.trim();
         if (!name) return window.showToast("Full name required", true);
         if (!phone) return window.showToast("Phone required", true);
-        set(ref(db, `customers/${auth.currentUser.uid}/name`), name);
-        set(ref(db, `customers/${auth.currentUser.uid}/phone`), phone).then(() => window.showToast("Profile Updated"));
+        if (db && auth?.currentUser) {
+            set(ref(db, `customers/${auth.currentUser.uid}/name`), name);
+            set(ref(db, `customers/${auth.currentUser.uid}/phone`), phone).then(() => window.showToast("Profile Updated"));
+        } else {
+            window.showToast("Profile Updated locally");
+        }
     };
 
     window.toggleAddrForm = () => document.getElementById('addrForm').classList.toggle('hidden');
@@ -2221,17 +2257,21 @@
         const loc = document.getElementById('newLocName').value.trim();
         const full = document.getElementById('newFullAddr').value.trim();
         if (!joint || !loc || !full) return window.showToast("All address fields required", true);
-        push(ref(db, `customers/${auth.currentUser.uid}/addresses`), { jointName: joint, location: loc, fullAddress: full }).then(() => {
-            document.getElementById('newJointName').value = "";
-            document.getElementById('newLocName').value = "";
-            document.getElementById('newFullAddr').value = "";
-            window.toggleAddrForm();
-            window.showToast("Address Saved");
-        });
+        if (db && auth?.currentUser) {
+            push(ref(db, `customers/${auth.currentUser.uid}/addresses`), { jointName: joint, location: loc, fullAddress: full }).then(() => {
+                document.getElementById('newJointName').value = "";
+                document.getElementById('newLocName').value = "";
+                document.getElementById('newFullAddr').value = "";
+                window.toggleAddrForm();
+                window.showToast("Address Saved");
+            });
+        }
     };
 
     window.deleteAddr = (id) => {
-        if (confirm("Remove this address?")) remove(ref(db, `customers/${auth.currentUser.uid}/addresses/${id}`));
+        if (confirm("Remove this address?") && db && auth?.currentUser) {
+            remove(ref(db, `customers/${auth.currentUser.uid}/addresses/${id}`));
+        }
     };
 
     // Payment functions
@@ -2252,7 +2292,7 @@
     };
 
     function recordLedgerPayment(amount, razorpayPaymentId) {
-        if (!userLocalData || !userLocalData.phone) return;
+        if (!userLocalData || !userLocalData.phone || !db) return;
         onValue(ref(db, 'receivables'), (snap) => {
             const data = snap.val();
             const entry = data ? Object.entries(data).find(([_, c]) => c.phone === userLocalData.phone) : null;
@@ -2288,7 +2328,7 @@
         const files = document.getElementById('complaintImages').files;
         if (!desc && files.length === 0) return window.showToast("Please add details or images", true);
         let imageUrls = [];
-        if (files.length > 0) {
+        if (files.length > 0 && storage && auth?.currentUser) {
             for (let i = 0; i < Math.min(files.length, 3); i++) {
                 const file = files[i];
                 const storageRef = sRef(storage, `complaint_images/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
@@ -2299,24 +2339,27 @@
                 } catch(e) {}
             }
         }
-        push(ref(db, 'complaints'), {
-            customerUid: auth.currentUser.uid,
-            customerName: userLocalData.name || 'User',
-            description: desc,
-            images: imageUrls,
-            status: 'PENDING',
-            createdAt: serverTimestamp()
-        }).then(() => {
-            window.showToast("Complaint Submitted");
-            document.getElementById('complaintDesc').value = "";
-            document.getElementById('complaintImages').value = "";
-        }).catch(e => window.showToast("Error submitting", true));
+        if (db && auth?.currentUser) {
+            push(ref(db, 'complaints'), {
+                customerUid: auth.currentUser.uid,
+                customerName: userLocalData ? userLocalData.name : 'User',
+                description: desc,
+                images: imageUrls,
+                status: 'PENDING',
+                createdAt: serverTimestamp()
+            }).then(() => {
+                window.showToast("Complaint Submitted");
+                document.getElementById('complaintDesc').value = "";
+                document.getElementById('complaintImages').value = "";
+            }).catch(e => window.showToast("Error submitting", true));
+        }
     };
 
     let _myComplaintsAll = [];
     let _currentComplaintFilter = 'all';
 
     function fetchComplaints(uid) {
+        if (!db) return;
         onValue(ref(db, 'complaints'), (snap) => {
             const data = snap.val();
             const mine = data ? Object.entries(data)
@@ -2400,7 +2443,7 @@
 
     function renderAddresses() {
         const list = document.getElementById('addressList');
-        const addrs = userLocalData.addresses || {};
+        const addrs = userLocalData ? userLocalData.addresses || {} : {};
         if (Object.keys(addrs).length === 0) {
             list.innerHTML = `<p class="text-xs text-gray-400 py-4 text-center col-span-2 italic">No locations saved.</p>`;
             return;
@@ -2417,7 +2460,7 @@
 
     function updateCheckoutSelect() {
         const sel = document.getElementById('checkoutAddrSelect');
-        const addrs = userLocalData.addresses || {};
+        const addrs = userLocalData ? userLocalData.addresses || {} : {};
         sel.innerHTML = '<option value="">-- Choose saved address --</option>';
         Object.values(addrs).forEach(a => {
             sel.innerHTML += `<option value="${a.jointName} - ${a.location}: ${a.fullAddress}">${a.jointName} (${a.location})</option>`;
@@ -2426,6 +2469,7 @@
 
     // Menu functions
     function fetchProducers() {
+        if (!db) return;
         onValue(ref(db, 'Production'), (snap) => {
             const list = document.getElementById('producersList');
             list.innerHTML = '';
@@ -2454,11 +2498,13 @@
         localStorage.setItem('oligo_active_producer_name', name);
         document.getElementById('menuTitle').innerText = name;
         window.navTo('viewMenu');
-        onValue(ref(db, 'menus/' + id), (snap) => {
-            menuData = snap.val() || {};
-            renderCatBar();
-            window.renderMenuItems('All');
-        });
+        if (db) {
+            onValue(ref(db, 'menus/' + id), (snap) => {
+                menuData = snap.val() || {};
+                renderCatBar();
+                window.renderMenuItems('All');
+            });
+        }
     };
 
     function renderCatBar() {
@@ -2511,6 +2557,8 @@
     function fetchOrders(uid) {
         document.getElementById('ordersList').innerHTML = orderSkeletonHTML(3);
         document.getElementById('subsList').innerHTML = orderSkeletonHTML(2);
+
+        if (!db) return;
 
         onValue(ref(db, 'orders'), (snap) => {
             const list = document.getElementById('ordersList');
@@ -2693,17 +2741,19 @@
         const newSelect = document.getElementById('swapNewItemSelect');
         newSelect.innerHTML = '<option value="">Loading options...</option>';
 
-        onValue(ref(db, 'menus/' + sub.restaurantId), (snap) => {
-            const menu = snap.val() || {};
-            const availableList = Object.entries(menu).filter(([_, i]) => i.available);
-            if (availableList.length === 0) {
-                newSelect.innerHTML = '<option value="">No replacement items available</option>';
-            } else {
-                newSelect.innerHTML = availableList.map(([id, item]) => 
-                    `<option value="${id}" data-name="${item.name}" data-price="${item.price}" data-cat="${item.category || ''}">${item.name} (Box ${item.price})</option>`
-                ).join('');
-            }
-        }, { onlyOnce: true });
+        if (db) {
+            onValue(ref(db, 'menus/' + sub.restaurantId), (snap) => {
+                const menu = snap.val() || {};
+                const availableList = Object.entries(menu).filter(([_, i]) => i.available);
+                if (availableList.length === 0) {
+                    newSelect.innerHTML = '<option value="">No replacement items available</option>';
+                } else {
+                    newSelect.innerHTML = availableList.map(([id, item]) => 
+                        `<option value="${id}" data-name="${item.name}" data-price="${item.price}" data-cat="${item.category || ''}">${item.name} (Box ${item.price})</option>`
+                    ).join('');
+                }
+            }, { onlyOnce: true });
+        }
 
         document.getElementById('swapModal').classList.remove('hidden');
         document.getElementById('swapModal').classList.add('flex');
@@ -2746,17 +2796,19 @@
 
         const newTotalPerDelivery = updatedItems.reduce((acc, i) => acc + (i.price * i.qty), 0);
 
-        update(ref(db, `subscriptions/${currentManagingSubId}`), {
-            items: updatedItems,
-            totalPerDelivery: newTotalPerDelivery,
-            updatedAt: serverTimestamp()
-        }).then(() => {
-            window.showToast("Variety swapped successfully!");
-            window.closeSwapModal();
-            window.manageSubscription(currentManagingSubId);
-        }).catch(() => {
-            window.showToast("Failed to swap variety.", true);
-        });
+        if (db) {
+            update(ref(db, `subscriptions/${currentManagingSubId}`), {
+                items: updatedItems,
+                totalPerDelivery: newTotalPerDelivery,
+                updatedAt: serverTimestamp()
+            }).then(() => {
+                window.showToast("Variety swapped successfully!");
+                window.closeSwapModal();
+                window.manageSubscription(currentManagingSubId);
+            }).catch(() => {
+                window.showToast("Failed to swap variety.", true);
+            });
+        }
     };
 
     function renderVisualCalendar(sub) {
@@ -2901,7 +2953,6 @@
         }
     };
 
-    // 48-HOUR AUTOMATED APPROVAL / LOCK-IN RESCHEDULE LOGIC
     window.submitReschedule = () => {
         const skip = document.getElementById('vacationDate').value;
         const move = document.getElementById('newDeliveryDate').value;
@@ -2920,7 +2971,7 @@
 
         const payload = {
             subscriptionId: currentManagingSubId,
-            customerUid: auth.currentUser.uid,
+            customerUid: auth?.currentUser?.uid || 'guest',
             customerName: userLocalData ? userLocalData.name : 'User',
             skipDate: skip,
             moveDate: move || "Skipped (No Reschedule)",
@@ -2930,19 +2981,21 @@
             createdAt: serverTimestamp()
         };
 
-        push(ref(db, 'subscription_modifications'), payload).then(() => {
-            if (isAutoApproved) {
-                window.showToast("Vacation pause auto-approved! Delivery updated.");
-            } else {
-                window.showToast("Submitted for emergency admin review (<48h harvest window).");
-            }
-            window.closeSubManage();
-        }).catch(e => window.showToast("Error sending request", true));
+        if (db) {
+            push(ref(db, 'subscription_modifications'), payload).then(() => {
+                if (isAutoApproved) {
+                    window.showToast("Vacation pause auto-approved! Delivery updated.");
+                } else {
+                    window.showToast("Submitted for emergency admin review (<48h harvest window).");
+                }
+                window.closeSubManage();
+            }).catch(e => window.showToast("Error sending request", true));
+        }
     };
 
     window.cancelSubscription = () => {
         if (!currentManagingSubId) return;
-        if (confirm("Stop this subscription? Future orders will not be generated.")) {
+        if (confirm("Stop this subscription? Future orders will not be generated.") && db) {
             update(ref(db, 'subscriptions/' + currentManagingSubId), { status: 'CANCELLED' })
             .then(() => {
                 window.showToast("Subscription Cancelled");
@@ -2952,7 +3005,7 @@
     };
 
     window.deleteSub = (subId) => {
-        if (confirm("Remove this subscription record permanently?")) {
+        if (confirm("Remove this subscription record permanently?") && db) {
             remove(ref(db, 'subscriptions/' + subId)).then(() => window.showToast("Record Deleted"));
         }
     };
@@ -2961,9 +3014,11 @@
         const order = allOrdersData[orderId];
         if (!order || order.status !== 'PLACED') return window.showToast("This order can no longer be cancelled.", true);
         if (!confirm("Cancel this order? This cannot be undone.")) return;
-        update(ref(db, 'orders/' + orderId), { status: 'CANCELLED', cancelledAt: serverTimestamp(), cancelledBy: 'customer' })
-            .then(() => window.showToast("Order Cancelled"))
-            .catch(() => window.showToast("Error cancelling order", true));
+        if (db) {
+            update(ref(db, 'orders/' + orderId), { status: 'CANCELLED', cancelledAt: serverTimestamp(), cancelledBy: 'customer' })
+                .then(() => window.showToast("Order Cancelled"))
+                .catch(() => window.showToast("Error cancelling order", true));
+        }
     };
 
     window.repeatOrder = (orderId) => {
@@ -2982,7 +3037,7 @@
 
     // Payment history
     function fetchPayments() {
-        if (!userLocalData || !userLocalData.phone) return;
+        if (!userLocalData || !userLocalData.phone || !db) return;
         const phone = userLocalData.phone;
         const historyList = document.getElementById('paymentHistoryList');
         const statusContainer = document.getElementById('payStatusContainer');
@@ -3071,7 +3126,7 @@
         if (payBtn) { payBtn.classList.add('hidden'); payBtn.classList.remove('flex'); }
         document.getElementById('payTestModeHint').classList.add('hidden');
 
-        const uid = auth.currentUser ? auth.currentUser.uid : null;
+        const uid = auth?.currentUser ? auth.currentUser.uid : null;
         const myPaidOrders = uid
             ? Object.entries(allOrdersData || {})
                 .filter(([_, o]) => o.customerUid === uid && o.razorpayPaymentId && String(o.razorpayPaymentId).trim())
@@ -3105,6 +3160,7 @@
     }
 
     function fetchModifications(uid) {
+        if (!db) return;
         onValue(ref(db, 'subscription_modifications'), (snap) => {
             const data = snap.val() || {};
             allModifications = {};
@@ -3144,6 +3200,7 @@
     }
 
     function fetchUser(uid) {
+        if (!db) return;
         onValue(ref(db, 'customers/' + uid), (snap) => {
             const data = snap.val() || {};
             userLocalData = data;
@@ -3197,60 +3254,73 @@
     // AUTH STATE
     // ================================================================
 
-    onAuthStateChanged(auth, (user) => {
-        if (user) {
-            document.getElementById('authSection').classList.add('hidden');
-            document.getElementById('authSection').classList.remove('flex');
-            document.getElementById('mainApp').classList.remove('hidden');
-            document.getElementById('mainApp').classList.add('flex');
-            fetchUser(user.uid);
-            fetchProducers();
-            fetchOrders(user.uid);
+    if (auth) {
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                document.getElementById('authSection').classList.add('hidden');
+                document.getElementById('authSection').classList.remove('flex');
+                document.getElementById('mainApp').classList.remove('hidden');
+                document.getElementById('mainApp').classList.add('flex');
+                fetchUser(user.uid);
+                fetchProducers();
+                fetchOrders(user.uid);
 
-            onValue(ref(db, 'settings/holidays'), (snap) => {
-                holidaysData = snap.val() || {};
-                checkHolidayAlerts();
-            });
+                if (db) {
+                    onValue(ref(db, 'settings/holidays'), (snap) => {
+                        holidaysData = snap.val() || {};
+                        checkHolidayAlerts();
+                    });
+                }
 
-            fetchModifications(user.uid);
-            fetchComplaints(user.uid);
+                fetchModifications(user.uid);
+                fetchComplaints(user.uid);
 
-            updateBadge();
-            const storedProd = localStorage.getItem('oligo_active_producer_id');
-            if (!storedProd) window.navTo('viewHome');
-        } else {
-            document.getElementById('mainApp').classList.add('hidden');
-            document.getElementById('mainApp').classList.remove('flex');
-            document.getElementById('authSection').classList.remove('hidden');
-            document.getElementById('authSection').classList.add('flex');
-        }
-        document.getElementById('appLoader').style.display = 'none';
-    });
+                updateBadge();
+                const storedProd = localStorage.getItem('oligo_active_producer_id');
+                if (!storedProd) window.navTo('viewHome');
+            } else {
+                document.getElementById('mainApp').classList.add('hidden');
+                document.getElementById('mainApp').classList.remove('flex');
+                document.getElementById('authSection').classList.remove('hidden');
+                document.getElementById('authSection').classList.add('flex');
+            }
+            forceDismissLoader();
+        });
+    } else {
+        // Fallback for local offline testing (file:// protocol)
+        document.getElementById('mainApp').classList.add('hidden');
+        document.getElementById('authSection').classList.remove('hidden');
+        document.getElementById('authSection').classList.add('flex');
+        forceDismissLoader();
+    }
 
     // Login/Register handlers
     document.getElementById('loginForm').onsubmit = (e) => {
         e.preventDefault();
-        signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value.trim(), document.getElementById('loginPass').value.trim())
-            .catch(err => window.showToast(getFriendlyErrorMessage(err), true));
+        if (auth) {
+            signInWithEmailAndPassword(auth, document.getElementById('loginEmail').value.trim(), document.getElementById('loginPass').value.trim())
+                .catch(err => window.showToast(getFriendlyErrorMessage(err), true));
+        } else {
+            window.showToast("Auth unavailable in local file mode", true);
+        }
     };
 
     document.getElementById('registerForm').onsubmit = (e) => {
         e.preventDefault();
-        createUserWithEmailAndPassword(auth, document.getElementById('regEmail').value.trim(), document.getElementById('regPass').value.trim())
-            .then(res => set(ref(db, 'customers/' + res.user.uid), {
-                name: document.getElementById('regName').value.trim(),
-                email: document.getElementById('regEmail').value.trim()
-            }))
-            .catch(err => window.showToast(getFriendlyErrorMessage(err), true));
+        if (auth && db) {
+            createUserWithEmailAndPassword(auth, document.getElementById('regEmail').value.trim(), document.getElementById('regPass').value.trim())
+                .then(res => set(ref(db, 'customers/' + res.user.uid), {
+                    name: document.getElementById('regName').value.trim(),
+                    email: document.getElementById('regEmail').value.trim()
+                }))
+                .catch(err => window.showToast(getFriendlyErrorMessage(err), true));
+        } else {
+            window.showToast("Registration unavailable in local file mode", true);
+        }
     };
 
-    // Hide loader after page load
-    setTimeout(() => {
-        const loader = document.getElementById('appLoader');
-        if (loader && loader.style.display !== 'none') {
-            loader.style.display = 'none';
-        }
-    }, 3000);
+    // Hide loader failsafe
+    setTimeout(forceDismissLoader, 1500);
 </script>
 </body>
 </html>
