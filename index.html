@@ -812,7 +812,7 @@
                             </div>
                             <div>
                                 <h4 class="font-bold text-sm text-gray-800">Freshness & Storage Tips</h4>
-                                <p class="text-[10px] text-gray-500">Keep your microgreens crisp for 3+ days</p>
+                                <p class="text-[10px] text-gray-500">Keep your microgreens crisp for 10+ days</p>
                             </div>
                         </div>
                         <ul class="text-xs space-y-2 text-gray-600 pl-2">
@@ -1079,8 +1079,8 @@
                         </div>
                         <div class="mt-3 pt-3 border-t border-gray-200">
                             <span class="text-[10px] font-bold text-gray-400 uppercase block mb-1">Duration</span>
-                            <select id="subDuration" class="w-full bg-transparent border-none font-bold text-xs outline-none focus:ring-0">
-                                <option value="1 Week (Trial)">1 Week Trial Pack</option> <!-- 1-WEEK TRIAL FEATURE -->
+                            <select id="subDuration" onchange="window.updateCheckoutSummaryCard()" class="w-full bg-transparent border-none font-bold text-xs outline-none focus:ring-0">
+                                <option value="1 Week (Trial)">1 Week Trial Pack</option>
                                 <option value="4 Weeks" selected>1 Month (4 Weeks)</option>
                                 <option value="12 Weeks">3 Months (12 Weeks)</option>
                                 <option value="Until Cancelled">Until Cancelled</option>
@@ -1148,6 +1148,16 @@
                     <span id="deliveryFeeDisplay" class="text-sm font-bold text-gray-800">₹0</span>
                 </div>
                 <p id="deliveryMessage" class="px-2 text-[10px] font-bold italic"></p>
+
+                <!-- DYNAMIC ORDER & SUBSCRIPTION SUMMARY BOX -->
+                <div id="checkoutSummaryCard" class="bg-emerald-50 border border-emerald-100 p-4 rounded-2xl my-3">
+                    <div class="flex justify-between items-center mb-2">
+                        <span id="summaryTypeBadge" class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600 text-white">One-Time Order</span>
+                        <span id="summaryScheduleText" class="text-xs font-bold text-emerald-900">Delivery: -</span>
+                    </div>
+                    <div class="text-[10px] text-gray-500 font-bold uppercase mb-1">Selected Microgreens:</div>
+                    <div id="summaryItemsList" class="flex flex-wrap gap-1"></div>
+                </div>
 
                 <div class="flex justify-between items-center px-2 pt-2">
                     <span class="text-gray-400 font-medium" id="totalLabel">Grand Total</span>
@@ -1635,6 +1645,42 @@
     };
 
     // ================================================================
+    // CHECKOUT SUMMARY CARD UPDATER
+    // ================================================================
+
+    window.updateCheckoutSummaryCard = () => {
+        const summaryCard = document.getElementById('checkoutSummaryCard');
+        const typeBadge = document.getElementById('summaryTypeBadge');
+        const scheduleText = document.getElementById('summaryScheduleText');
+        const itemsList = document.getElementById('summaryItemsList');
+
+        if (!summaryCard || !typeBadge || !scheduleText || !itemsList) return;
+
+        const isSub = document.getElementById('subToggle')?.checked;
+        
+        if (isSub) {
+            const duration = document.getElementById('subDuration')?.value || '';
+            const days = selectedSubscriptionDays.length > 0 ? selectedSubscriptionDays.join(', ') : 'No days selected';
+            typeBadge.innerText = `Subscription (${duration})`;
+            typeBadge.className = "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-600 text-white";
+            scheduleText.innerText = `Days: ${days}`;
+        } else {
+            const reqDate = document.getElementById('checkoutDate')?.value || '-';
+            typeBadge.innerText = "One-Time Order";
+            typeBadge.className = "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600 text-white";
+            scheduleText.innerText = `Date: ${reqDate}`;
+        }
+
+        if (basket.length === 0) {
+            itemsList.innerHTML = '<span class="text-xs text-gray-400 italic">No items in basket</span>';
+        } else {
+            itemsList.innerHTML = basket.map(item => 
+                `<span class="inline-flex items-center bg-white border border-emerald-200 text-emerald-800 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-sm">${item.qty}× ${item.name}</span>`
+            ).join('');
+        }
+    };
+
+    // ================================================================
     // CART & ORDER FUNCTIONS
     // ================================================================
 
@@ -1657,6 +1703,7 @@
             calculateDeliveryLogic(document.getElementById('checkoutDate').value);
         }
         updateOrderButtonLabel();
+        window.updateCheckoutSummaryCard();
     };
 
     window.setPaymentMethod = (method) => {
@@ -1695,6 +1742,7 @@
         } else {
             selectedSubscriptionDays.push(day);
         }
+        window.updateCheckoutSummaryCard();
     };
 
     window.openCart = () => {
@@ -1731,6 +1779,7 @@
                 window.showToast("No deliveries on Sundays.", true);
                 this.value = validDateStr;
                 calculateDeliveryLogic(validDateStr);
+                window.updateCheckoutSummaryCard();
                 return;
             }
             const holiday = Object.values(holidaysData).find(h => h.date === dateStr);
@@ -1738,11 +1787,15 @@
                 window.showToast(`Farm closed on ${dateStr} (${holiday.name}).`, true);
                 this.value = validDateStr;
                 calculateDeliveryLogic(validDateStr);
+                window.updateCheckoutSummaryCard();
                 return;
             }
             calculateDeliveryLogic(dateStr);
+            window.updateCheckoutSummaryCard();
         });
         calculateDeliveryLogic(newDateInput.value);
+        window.updateCheckoutSummaryCard();
+
         document.getElementById('cartModal').classList.remove('hidden');
         document.getElementById('cartModal').classList.add('flex');
         
@@ -1777,6 +1830,7 @@
                 msgEl.innerText = v.type === 'percent' ? `${appliedVoucher.value}% off applied!` : `₹${appliedVoucher.value} off applied!`;
             }
             calculateDeliveryLogic(document.getElementById('checkoutDate').value);
+            window.updateCheckoutSummaryCard();
         }, { onlyOnce: true });
     };
 
@@ -1838,6 +1892,7 @@
         if(basket.length === 0) {
             list.innerHTML = `<p class="text-center text-gray-400 py-10 font-medium">Your basket is empty</p>`;
             totalEl.innerText = "Box 0";
+            window.updateCheckoutSummaryCard();
             return;
         }
         list.innerHTML = basket.map((item, idx) => {
@@ -1854,6 +1909,7 @@
         const dateIn = document.getElementById('checkoutDate').value;
         if(dateIn) calculateDeliveryLogic(dateIn);
         if(document.getElementById('subToggle').checked) totalEl.innerText = "Box " + Math.round(total - currentDiscount);
+        window.updateCheckoutSummaryCard();
     }
 
     window.changeQty = (idx, d) => {
@@ -1895,7 +1951,7 @@
             const addr = document.getElementById('checkoutAddrSelect').value;
             if (!addr) return window.showToast("Select address.", true);
             
-            const dropOffPref = document.getElementById('dropOffPref').value; // CAPTURED DROP-OFF INSTRUCTION
+            const dropOffPref = document.getElementById('dropOffPref').value;
             const note = document.getElementById('orderNote').value.trim();
             const rawItemsTotal = basket.reduce((a, b) => a + (b.price * b.qty), 0);
             const discount = Math.min(currentDiscount || 0, rawItemsTotal);
@@ -2525,7 +2581,7 @@
         deliveryDate.setHours(0,0,0,0);
         const diffTime = deliveryDate - today;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays >= 3; // Returns true if 3 or more days away from harvest
+        return diffDays >= 3;
     };
 
     window.manageSubscription = (subId) => {
@@ -2565,7 +2621,6 @@
         const list = document.getElementById('subItemsList');
         list.innerHTML = sub.items.map(i => `<div class="flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs"><span class="font-medium text-gray-700">${i.name}</span><span class="font-bold text-gray-900">x${i.qty}</span></div>`).join('');
 
-        // 3-Day Lead Time Variety Swap Cutoff Check
         const nextDateStr = getNextSubscriptionDate(sub.frequency);
         const isSwapEligible = window.checkSwapEligibility(nextDateStr);
         const swapBtn = document.getElementById('swapVarietyBtn');
